@@ -76,33 +76,46 @@ async function run() {
       }
     };
 
-    app.post("/add-book", async (req, res) => {
-      // Book Title, Cover Image, Author Name, Genre, Pickup Location, Available Until
-      const data = req.body;
-      const result = await booksCollection.insertOne(data);
-      res.send(result);
-    });
 
+    // Add user endpoint
     app.post("/add-user", async (req, res) => {
-      const userData = req.body;
+      try {
+        const { name, email, photo, blood_group, district, upazila, role, status } = req.body;
 
-      const find_result = await userCollection.findOne({
-        email: userData.email,
-      });
+        if (!name || !email || !photo || !blood_group || !district || !upazila) {
+          return res.status(400).json({ message: "Missing required fields" });
+        }
 
-      if (find_result) {
-        userCollection.updateOne(
-          { email: userData.email },
-          {
-            $inc: { loginCount: 1 },
-          }
-        );
-        res.send({ msg: "user already exist" });
-      } else {
-        const result = await userCollection.insertOne(userData);
-        res.send(result);
+        // Check if user already exists
+        const existing = await userCollection.findOne({ email });
+        if (existing) {
+          return res.status(409).json({ message: "User already exists" });
+        }
+
+        // Insert new user
+        const user = {
+          name,
+          email,
+          photo,
+          blood_group,
+          district,
+          upazila,
+          role: role || "donor",
+          status: status || "active",
+          createdAt: new Date(),
+        };
+
+        const result = await userCollection.insertOne(user);
+        res.status(201).json({ message: "User registered", userId: result.insertedId });
+      } catch (err) {
+        res.status(500).json({ message: "Server error", error: err.message });
       }
     });
+
+
+
+   
+ 
 
     app.get("/get-user-role", verifyFirebaseToken, async (req, res) => {
       const user = await userCollection.findOne({
@@ -140,56 +153,12 @@ async function run() {
       }
     );
 
-    app.get("/available-books", async (req, res) => {
-      const data = await booksCollection
-        .find({ status: "available" })
-        .toArray();
-      res.send(data);
-    });
+   
 
-    app.get("/featured-books", async (req, res) => {
-      const data = await booksCollection
-        .find({ status: "available" })
-        .sort({ createdAt: -1 })
-        .limit(4)
-        .toArray();
-      res.send(data);
-    });
+  
 
-    app.get("/my-books", verifyFirebaseToken, async (req, res) => {
-      const { page, filter } = req.query;
-      const query = { ownerEmail: req.firebaseUser.email };
+    
 
-      if (filter && filter !== "all") {
-        query.status = filter;
-      }
-      const totalCount = await booksCollection.countDocuments(query);
-      const data = await booksCollection
-        .find(query)
-        .skip((page - 1) * 3)
-        .limit(3)
-        .toArray();
-      res.send({ books: data, totalCount });
-    });
-
-    app.get("/details/:id", async (req, res) => {
-      const query = { _id: new ObjectId(req.params.id) };
-      const data = await booksCollection.findOne(query);
-      res.send(data);
-    });
-
-    app.patch("/request/:id", verifyFirebaseToken, async (req, res) => {
-      const query = { _id: new ObjectId(req.params.id) };
-      const { donationAmount } = req.body;
-      const data = await booksCollection.updateOne(query, {
-        $set: {
-          status: "requested",
-          requestedBy: req.firebaseUser.email,
-          donationAmount,
-        },
-      });
-      res.send(data);
-    });
 
     app.get("/admin-dashboard-stats", async (req, res) => {
       const userCount = await userCollection.countDocuments();
@@ -213,7 +182,7 @@ async function run() {
           amount: amount * 100, // in cents (e.g., 500 = $5.00)
           currency: "usd",
           payment_method_types: ["card"],
-          
+
         });
 
         res.send({
