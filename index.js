@@ -61,8 +61,8 @@ async function run() {
   try {
     await client.connect();
     const db = client.db("blood-center");
-    // const booksCollection = db.collection("books");
     const userCollection = db.collection("users");
+    const donationRequestsCollection = db.collection("donationRequests");
 
     const verifyAdmin = async (req, res, next) => {
       const user = await userCollection.findOne({
@@ -118,6 +118,7 @@ async function run() {
  
 
     app.get("/get-user-role", verifyFirebaseToken, async (req, res) => {
+      console.log("🚀 ~ get-user-role ~ req.firebaseUser:", req.firebaseUser);
       const user = await userCollection.findOne({
         email: req.firebaseUser.email,
       });
@@ -152,6 +153,109 @@ async function run() {
         res.send(result);
       }
     );
+
+
+
+    // ---------------------------------------------------------------------------dashboard api--------------------------------------------------------------
+
+// Create donation request
+app.post("/donation-requests", async (req, res) => {
+  try {
+    const {
+      requesterName,
+      requesterEmail,
+      recipientName,
+      recipientDistrict,
+      recipientUpazila,
+      hospitalName,
+      addressLine,
+      bloodGroup,
+      donationDate,
+      donationTime,
+      requestMessage,
+    } = req.body;
+
+    // Only allow active users (you can check user status here if you want)
+    // const user = await userCollection.findOne({ email: requesterEmail });
+    // if (!user || user.status !== "active") {
+    //   return res.status(403).json({ message: "User is not active" });
+    // }
+
+    const doc = {
+      requesterName,
+      requesterEmail,
+      recipientName,
+      recipientDistrict,
+      recipientUpazila,
+      hospitalName,
+      addressLine,
+      bloodGroup,
+      donationDate,
+      donationTime,
+      requestMessage,
+      donationStatus: "pending", // default
+      createdAt: new Date(),
+      donorInfo: null, // will be filled when inprogress
+    };
+    const result = await donationRequestsCollection.insertOne(doc);
+    res.status(201).json({ message: "Donation request created", id: result.insertedId });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// Get recent 3 donation requests for a donor
+app.get("/donation-requests/recent", async (req, res) => {
+  const { email } = req.query;
+  const requests = await donationRequestsCollection
+    .find({ requesterEmail: email })
+    .sort({ createdAt: -1 })
+    .limit(3)
+    .toArray();
+  res.json(requests);
+});
+
+// Get all donation requests for a donor (with optional status filter & pagination)
+app.get("/donation-requests", async (req, res) => {
+  const { email, status, page = 1, limit = 10 } = req.query;
+  const query = { requesterEmail: email };
+  if (status && status !== "all") query.donationStatus = status;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const total = await donationRequestsCollection.countDocuments(query);
+  const requests = await donationRequestsCollection
+    .find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .toArray();
+  res.json({ requests, total });
+});
+
+// Update donation request (edit)
+app.patch("/donation-requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const update = req.body;
+  delete update._id; // never update _id
+  const result = await donationRequestsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: update }
+  );
+  res.json(result);
+});
+
+// Delete donation request
+app.delete("/donation-requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(id) });
+  res.json(result);
+});
+
+// Get single donation request (details)
+app.get("/donation-requests/:id", async (req, res) => {
+  const { id } = req.params;
+  const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
+  res.json(request);
+});
 
    
 
