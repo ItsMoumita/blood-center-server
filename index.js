@@ -398,6 +398,7 @@ app.get("/admin-dashboard-stats", async (req, res) => {
     createdAt: { $gte: firstDayLastMonth, $lt: firstDayThisMonth }
   });
 
+  
   // Total funding (sum of all time and last month)
   const totalFundingAgg = await db.collection("fundings").aggregate([
     { $group: { _id: null, total: { $sum: "$amount" } } }
