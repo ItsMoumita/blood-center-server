@@ -264,19 +264,121 @@ app.get("/donation-requests/:id", async (req, res) => {
     
 
 
-    app.get("/admin-dashboard-stats", async (req, res) => {
-      const userCount = await userCollection.countDocuments();
-      const bookCount = await booksCollection.countDocuments();
-      const bookRequestCount = await booksCollection.countDocuments({
-        status: "requested",
-      });
+  // ----------------------------------------------------------------- admin api-------------------------------------------------------------------------
 
-      res.send({
-        totalUsers: userCount,
-        totalBooks: bookCount,
-        totalRequest: bookRequestCount,
-      });
-    });
+
+  // Get admin dashboard stats
+app.get("/admin-dashboard-stats", async (req, res) => {
+  const userCount = await userCollection.countDocuments({ role: { $in: ["donor", "volunteer"] } });
+  const totalFunding = await db.collection("fundings").aggregate([
+    { $group: { _id: null, total: { $sum: "$amount" } } }
+  ]).toArray();
+  const donationRequestCount = await donationRequestsCollection.countDocuments();
+  res.json({
+    totalUsers: userCount,
+    totalFunding: totalFunding[0]?.total || 0,
+    totalRequests: donationRequestCount,
+  });
+});
+
+// Get all users (with pagination and status filter)
+app.get("/users", async (req, res) => {
+  const { page = 1, limit = 10, status = "all" } = req.query;
+  const query = {};
+  if (status !== "all") query.status = status;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const total = await userCollection.countDocuments(query);
+  const users = await userCollection.find(query).skip(skip).limit(parseInt(limit)).toArray();
+  res.json({ users, total });
+});
+
+// Update user status (block/unblock)
+app.patch("/users/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const result = await userCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status } }
+  );
+  res.json(result);
+});
+
+// Update user role (make volunteer/admin)
+app.patch("/users/:id/role", async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+  const result = await userCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { role } }
+  );
+  res.json(result);
+});
+
+// Get all donation requests (admin)
+app.get("/admin/donation-requests", async (req, res) => {
+  const { status = "all", page = 1, limit = 10 } = req.query;
+  const query = {};
+  if (status !== "all") query.donationStatus = status;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const total = await donationRequestsCollection.countDocuments(query);
+  const requests = await donationRequestsCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)).toArray();
+  res.json({ requests, total });
+});
+
+// Update donation request status (done/canceled)
+app.patch("/donation-requests/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const result = await donationRequestsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { donationStatus: status } }
+  );
+  res.json(result);
+});
+
+// Blog endpoints
+const blogCollection = db.collection("blogs");
+
+// Add blog
+app.post("/blogs", async (req, res) => {
+  const { title, thumbnail, content } = req.body;
+  const blog = {
+    title,
+    thumbnail,
+    content,
+    status: "draft",
+    createdAt: new Date(),
+  };
+  const result = await blogCollection.insertOne(blog);
+  res.status(201).json({ message: "Blog created", id: result.insertedId });
+});
+
+// Get blogs (with status filter)
+app.get("/blogs", async (req, res) => {
+  const { status = "all" } = req.query;
+  const query = {};
+  if (status !== "all") query.status = status;
+  const blogs = await blogCollection.find(query).sort({ createdAt: -1 }).toArray();
+  res.json(blogs);
+});
+
+// Publish/unpublish blog
+app.patch("/blogs/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const result = await blogCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status } }
+  );
+  res.json(result);
+});
+
+// Delete blog
+app.delete("/blogs/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await blogCollection.deleteOne({ _id: new ObjectId(id) });
+  res.json(result);
+});
 
     app.post("/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
