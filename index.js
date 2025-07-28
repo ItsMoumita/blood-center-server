@@ -380,6 +380,69 @@ app.delete("/blogs/:id", async (req, res) => {
   res.json(result);
 });
 
+
+// Real Stat Changes for Admin Dashboard
+
+app.get("/admin-dashboard-stats", async (req, res) => {
+  // Dates for this month and last month
+  const now = new Date();
+  const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const firstDayThisMonthStr = firstDayThisMonth.toISOString();
+  const firstDayLastMonthStr = firstDayLastMonth.toISOString();
+
+  // Total users (donor/volunteer)
+  const totalUsers = await userCollection.countDocuments({ role: { $in: ["donor", "volunteer"] } });
+  const usersLastMonth = await userCollection.countDocuments({
+    role: { $in: ["donor", "volunteer"] },
+    createdAt: { $gte: firstDayLastMonth, $lt: firstDayThisMonth }
+  });
+
+  // Total funding (sum of all time and last month)
+  const totalFundingAgg = await db.collection("fundings").aggregate([
+    { $group: { _id: null, total: { $sum: "$amount" } } }
+  ]).toArray();
+  const totalFunding = totalFundingAgg[0]?.total || 0;
+  const fundingLastMonthAgg = await db.collection("fundings").aggregate([
+    { $match: { createdAt: { $gte: firstDayLastMonth, $lt: firstDayThisMonth } } },
+    { $group: { _id: null, total: { $sum: "$amount" } } }
+  ]).toArray();
+  const fundingLastMonth = fundingLastMonthAgg[0]?.total || 0;
+
+  // Total donation requests (all time and last month)
+  const totalRequests = await donationRequestsCollection.countDocuments();
+  const requestsLastMonth = await donationRequestsCollection.countDocuments({
+    createdAt: { $gte: firstDayLastMonth, $lt: firstDayThisMonth }
+  });
+
+  // Calculate percentage changes
+  function getChange(current, last) {
+    if (last === 0) return current === 0 ? 0 : 100;
+    return ((current - last) / last * 100).toFixed(1);
+  }
+
+  res.json({
+    totalUsers,
+    usersLastMonth,
+    usersChange: getChange(totalUsers, usersLastMonth),
+    totalFunding,
+    fundingLastMonth,
+    fundingChange: getChange(totalFunding, fundingLastMonth),
+    totalRequests,
+    requestsLastMonth,
+    requestsChange: getChange(totalRequests, requestsLastMonth),
+  });
+});
+
+
+
+
+
+
+
+
+
+
     app.post("/create-payment-intent", async (req, res) => {
       const { amount } = req.body;
 
