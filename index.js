@@ -160,17 +160,54 @@ async function run() {
 
 
 // GET /search-donation-requests?blood_group=B-&district=Brahmanbaria&upazila=Kasba
+// app.get("/search-donation-requests", async (req, res) => {
+//   const { blood_group, district, upazila } = req.query;
+//   const query = {};
+//   if (blood_group) query.bloodGroup = blood_group;
+//   if (district) query.recipientDistrict = district;
+//   if (upazila) query.recipientUpazila = upazila;
+//   // Optionally, only show pending or available requests:
+//   // query.donationStatus = "pending";
+//   const requests = await donationRequestsCollection.find(query).toArray();
+//   res.json(requests);
+// });
+
+
+// GET /search-donation-requests?blood_group=B-&district=Brahmanbaria&upazila=Kasba
 app.get("/search-donation-requests", async (req, res) => {
   const { blood_group, district, upazila } = req.query;
-  const query = {};
+  const query = { donationStatus: "pending" }; // Only pending
   if (blood_group) query.bloodGroup = blood_group;
   if (district) query.recipientDistrict = district;
   if (upazila) query.recipientUpazila = upazila;
-  // Optionally, only show pending or available requests:
-  // query.donationStatus = "pending";
   const requests = await donationRequestsCollection.find(query).toArray();
   res.json(requests);
 });
+
+
+// PATCH /donation-requests/:id/confirm-donation
+app.patch("/donation-requests/:id/confirm-donation", verifyFirebaseToken, async (req, res) => {
+  const { id } = req.params;
+  console.log(id)
+  const { donorName, donorEmail } = req.body;
+  // Add donor info as an array (for multiple donors)
+  console.log(req.body);
+  const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
+  let donorInfo = Array.isArray(request.donorInfo) ? request.donorInfo : [];
+
+  donorInfo.push({ name: donorName, email: donorEmail, confirmedAt: new Date() });
+  console.log(donorInfo);
+  const result = await donationRequestsCollection.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { donationStatus: "inprogress", donorInfo } }
+  );
+  console.log(result);
+  res.json(result);
+});
+
+
+
+
 
     app.get("/donation-requests/:id", async (req, res) => {
       const { id } = req.params;
@@ -223,11 +260,30 @@ app.get("/admin-dashboard-stats", verifyFirebaseToken, async (req, res) => {
     });
 
     // DELETE donation request (admin only)
-    app.delete("/donation-requests/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(id) });
-      res.json(result);
-    });
+    // app.delete("/donation-requests/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
+    //   const { id } = req.params;
+    //   const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(id) });
+    //   res.json(result);
+    // });
+
+
+    // DELETE donation request (admin or owner)
+app.delete("/donation-requests/:id", verifyFirebaseToken, async (req, res) => {
+  const { id } = req.params;
+  const user = await userCollection.findOne({ email: req.firebaseUser.email });
+  const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
+
+  // Only allow if admin or the requester
+  if (
+    user.role === "admin" ||
+    (request && request.requesterEmail === req.firebaseUser.email)
+  ) {
+    const result = await donationRequestsCollection.deleteOne({ _id: new ObjectId(id) });
+    return res.json(result);
+  } else {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+});
 
     // PATCH donation request (edit) (admin only)
     app.patch("/donation-requests/:id", verifyFirebaseToken, verifyAdmin, async (req, res) => {
