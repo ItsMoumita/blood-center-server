@@ -158,6 +158,20 @@ async function run() {
       res.json({ requests, total });
     });
 
+
+// GET /search-donation-requests?blood_group=B-&district=Brahmanbaria&upazila=Kasba
+app.get("/search-donation-requests", async (req, res) => {
+  const { blood_group, district, upazila } = req.query;
+  const query = {};
+  if (blood_group) query.bloodGroup = blood_group;
+  if (district) query.recipientDistrict = district;
+  if (upazila) query.recipientUpazila = upazila;
+  // Optionally, only show pending or available requests:
+  // query.donationStatus = "pending";
+  const requests = await donationRequestsCollection.find(query).toArray();
+  res.json(requests);
+});
+
     app.get("/donation-requests/:id", async (req, res) => {
       const { id } = req.params;
       const request = await donationRequestsCollection.findOne({ _id: new ObjectId(id) });
