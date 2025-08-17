@@ -441,6 +441,46 @@ app.get("/live-counts", async (req, res) => {
 });
 
 
+// -------------------------------public donation requests--------------------------------------------------------------------------
+app.post("/public-donation-request", async (req, res) => {
+  try {
+    const {
+      requesterName,
+      requesterEmail,
+      recipientName,
+      recipientDistrict,
+      recipientUpazila,
+      hospitalName,
+      addressLine,
+      bloodGroup,
+      donationDate,
+      donationTime,
+      requestMessage,
+    } = req.body;
+
+    const doc = {
+      requesterName,
+      requesterEmail,
+      recipientName,
+      recipientDistrict,
+      recipientUpazila,
+      hospitalName,
+      addressLine,
+      bloodGroup,
+      donationDate,
+      donationTime,
+      requestMessage,
+      donationStatus: "pending",
+      createdAt: new Date(),
+      donorInfo: null,
+    };
+    const result = await donationRequestsCollection.insertOne(doc);
+    res.status(201).json({ message: "Donation request created", id: result.insertedId });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 
     console.log("connected");
