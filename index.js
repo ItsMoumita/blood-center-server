@@ -47,6 +47,7 @@ async function run() {
     const userCollection = db.collection("users");
     const donationRequestsCollection = db.collection("donationRequests");
     const blogCollection = db.collection("blogs");
+    const fundingsCollection = db.collection("fundings");
 
     // Role middlewares
     const verifyAdmin = async (req, res, next) => {
@@ -410,6 +411,36 @@ app.get("/fundings", verifyFirebaseToken, async (req, res) => {
     .toArray();
   res.json({ fundings, total });
 });
+
+
+//-------------------------------GET /live-counts--------------------------------------
+app.get("/live-counts", async (req, res) => {
+  try {
+    const totalDonors = await userCollection.countDocuments({ role: "donor", status: "active" });
+    const totalVolunteers = await userCollection.countDocuments({ role: "volunteer", status: "active" });
+
+    // Use your fundings collection here:
+    const totalFundingAgg = await fundingsCollection.aggregate([
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]).toArray();
+    const totalFunding = totalFundingAgg[0]?.total || 0;
+
+    const totalRequests = await donationRequestsCollection.countDocuments();
+    const totalSuccessfulDonations = await donationRequestsCollection.countDocuments({ donationStatus: "done" });
+
+    res.json({
+      totalDonors,
+      totalVolunteers,
+      totalFunding,
+      totalRequests,
+      totalSuccessfulDonations,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
 
 
     console.log("connected");
